@@ -1,0 +1,313 @@
+
+  <div class="app">
+   <header>
+    <div class="logo"><img class="logo-image" src="/assets/finconsult-logo.png" alt="" /><span>Finconsult</span></div>
+    <div class="header-actions">
+     <span class="demo">prototip &middot; date demonstrative</span>
+     <button class="settings-trigger" id="openSettings" type="button" aria-haspopup="dialog" aria-controls="settingsPanel" aria-label="Deschide setările">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.5.9l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.5-.9l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.8l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.5-.9l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.5.9l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.8Z"/></svg>
+     </button>
+    </div>
+   </header>
+
+   <!-- AI provider settings. API keys are kept in memory only, never in localStorage. -->
+   <div class="settings-backdrop" id="settingsBackdrop" hidden>
+    <section class="settings-panel" id="settingsPanel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+     <div class="settings-heading">
+      <div>
+       <p class="eyebrow">CONFIGURARE</p>
+       <h2 id="settingsTitle">Setări asistent AI</h2>
+      </div>
+      <button class="close-settings" id="closeSettings" type="button" aria-label="Închide setările">&times;</button>
+     </div>
+
+     <p class="mute">Alege unde rulează modelul care răspunde la întrebări.</p>
+
+     <label for="aiProvider">Furnizor AI</label>
+     <select id="aiProvider">
+      <option value="ollama">Ollama (local, pe calculatorul tău)</option>
+      <option value="gemini">Google Gemini (cloud)</option>
+      <option value="openai">Alt furnizor compatibil OpenAI (cloud)</option>
+     </select>
+
+     <div id="ollamaSettings" class="provider-fields">
+      <label for="ollamaUrl">Adresa serverului Ollama</label>
+      <input id="ollamaUrl" type="url" value="http://localhost:11434" placeholder="http://localhost:11434">
+      <label for="ollamaModel">Model local</label>
+      <input id="ollamaModel" type="text" value="llama3.2" placeholder="llama3.2">
+      <p class="field-hint">Pornește Ollama și descarcă modelul ales înainte de demonstrație. Dacă pagina este deschisă de pe alt dispozitiv, „localhost” se referă la acel dispozitiv, nu la calculatorul care găzduiește Ollama.</p>
+     </div>
+
+     <div id="openaiSettings" class="provider-fields" hidden>
+      <label for="apiBaseUrl">URL de bază API</label>
+      <input id="apiBaseUrl" type="url" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
+      <label for="apiModel">Model</label>
+      <input id="apiModel" type="text" value="gpt-4o-mini" placeholder="gpt-4o-mini">
+      <label for="apiKey">Cheie API</label>
+      <input id="apiKey" type="password" autocomplete="off" placeholder="Introdu cheia API">
+      <button class="btn ghost clear-key" id="clearApiKey" type="button">Șterge cheia din sesiune</button>
+      <p class="field-hint">Acceptă furnizori care implementează endpoint-ul OpenAI Chat Completions. Introdu URL-ul și modelul indicate de furnizor.</p>
+     </div>
+
+     <div id="geminiSettings" class="provider-fields" hidden>
+      <label for="geminiModel">Model Gemini</label>
+      <input id="geminiModel" type="text" value="gemini-2.5-flash-lite" placeholder="gemini-2.5-flash-lite">
+      <label for="geminiKey">Cheie API Google AI Studio</label>
+      <input id="geminiKey" type="password" autocomplete="off" placeholder="Introdu cheia Gemini API">
+      <button class="btn ghost clear-key" id="clearGeminiKey" type="button">Șterge cheia din sesiune</button>
+      <p class="field-hint">Folosește cheia creată în Google AI Studio. Disponibilitatea și limitele gratuite depind de model, regiune și condițiile curente ale Google.</p>
+     </div>
+
+     <div class="prompt-editor">
+      <div class="prompt-heading">
+       <label for="systemPrompt">Instrucțiuni pentru asistent (system prompt)</label>
+       <button class="btn ghost" id="resetPrompt" type="button">Restabilește implicit</button>
+      </div>
+      <textarea id="systemPrompt" rows="8" spellcheck="true"></textarea>
+      <p class="field-hint">Aceste instrucțiuni sunt trimise modelului la fiecare conversație. Spune-i ce rol are, cum să răspundă și ce limite trebuie să respecte.</p>
+     </div>
+
+     <div class="security-note">
+      <strong>Notă despre securitate</strong>
+      <p>Acesta este un prototip pentru demonstrație. Cheile API introduse în browser pot fi inspectate și pot apărea în traficul de rețea. Nu sunt salvate în localStorage și se pierd la reîncărcarea paginii. Pentru o aplicație publică, mută apelurile cloud într-un backend securizat.</p>
+     </div>
+
+     <div class="settings-status" id="settingsStatus" role="status" aria-live="polite"></div>
+     <div class="settings-actions">
+      <button class="btn ghost" id="testAI" type="button">Testează conexiunea</button>
+      <button class="btn" id="saveSettings" type="button">Salvează setările</button>
+     </div>
+    </section>
+   </div>
+   <main id="main">
+    <section class="on" id="home">
+     <h1>
+      &Icirc;nainte s&abreve; semnezi, vezi c&acirc;t cost&abreve; cu adev&abreve;rat.
+     </h1>
+     <p>
+      Compar&abreve; credite, verific&abreve; dac&abreve; &icirc;ți permiți rata și &icirc;nvaț&abreve; s&abreve; recunoști o escrocherie. F&abreve;r&abreve; jargon.
+     </p>
+     <div class="tiles">
+      <button class="tile" data-go="calc">
+       <strong>
+        Cost real al creditului
+       </strong>
+       <span>
+        Banc&abreve; sau microfinanțare? Vezi DAE.
+       </span>
+      </button>
+      <button class="tile" data-go="debt">
+       <strong>
+        &Icirc;mi permit rata?
+       </strong>
+       <span>
+        Gradul t&abreve;u de &icirc;ndatorare.
+       </span>
+      </button>
+      <button class="tile" data-go="fraud">
+       <strong>
+        Test anti-fraud&abreve;
+       </strong>
+       <span>
+        Recunoaște capcanele online.
+       </span>
+      </button>
+      <button class="tile" data-go="bot">
+       <strong>
+        &Icirc;ntreab&abreve; asistentul
+       </strong>
+       <span>
+        Dob&acirc;nd&abreve;, inflație, garanții.
+       </span>
+      </button>
+     </div>
+     <h3>
+      De ce conteaz&abreve;
+     </h3>
+     <div class="facts">
+      <div>
+       Doar 1 din 3 moldoveni &icirc;nțelege dob&acirc;nda și inflația.
+      </div>
+      <div>
+       &Icirc;n 2025: peste 1 200 de infracțiuni financiare online, peste 200 mil. lei pierderi.
+      </div>
+      <div>
+       Portofoliul microfinanț&abreve;rii a dep&abreve;șit 10 mld. lei, iar supra&icirc;ndatorarea crește.
+      </div>
+     </div>
+    </section>
+    <!-- Loan comparison calculator -->
+    <section id="calc">
+     <h2>
+      Cost real al creditului
+     </h2>
+     <p class="mute">
+      Aceeași sum&abreve;, aceeași perioad&abreve;. Singura cifr&abreve; care compar&abreve; corect ofertele este DAE (dob&acirc;nda anual&abreve; efectiv&abreve;), pentru c&abreve; include și comisioanele.
+     </p>
+     <div class="card">
+      <label for="amt">
+       Suma
+       <b id="amtV">
+       </b>
+      </label>
+      <input id="amt" max="100000" min="1000" step="500" type="range" value="10000"/>
+      <label for="mon">
+       Perioada
+       <b id="monV">
+       </b>
+      </label>
+      <input id="mon" max="60" min="3" step="1" type="range" value="12"/>
+     </div>
+     <div id="msg">
+     </div>
+     <div id="offers">
+     </div>
+     <div class="card">
+      <h3>
+       Ai o ofert&abreve; primit&abreve;?
+      </h3>
+      <p class="mute" style="margin-bottom:0">
+       Introdu dob&acirc;nda nominal&abreve; anual&abreve; și comisionul de acordare din contract.
+      </p>
+      <div class="mini">
+       <div>
+        <label for="cr">
+         Dob&acirc;nd&abreve; % / an
+        </label>
+        <input id="cr" max="500" min="0" type="number" value="30"/>
+       </div>
+       <div>
+        <label for="cf">
+         Comision %
+        </label>
+        <input id="cf" max="30" min="0" type="number" value="3"/>
+       </div>
+      </div>
+     </div>
+     <p class="mute">
+      Ofertele marcate &bdquo;demo&rdquo; sunt ilustrative, nu reprezint&abreve; tarife reale. &Icirc;n versiunea final&abreve; vin de la b&abreve;nci partenere.
+     </p>
+    </section>
+    <!-- Monthly debt affordability calculator -->
+    <section id="debt">
+     <h2>
+      &Icirc;mi permit rata?
+     </h2>
+     <p class="mute">
+      Regula general&abreve;: toate ratele lunare &icirc;mpreun&abreve; s&abreve; nu dep&abreve;șeasc&abreve; 30&ndash;40% din venit.
+     </p>
+     <div class="card">
+      <label for="inc">
+       Venitul lunar net (lei)
+      </label>
+      <input id="inc" min="0" type="number" value="9000"/>
+      <label for="ex">
+       Rate deja existente pe lun&abreve; (lei)
+      </label>
+      <input id="ex" min="0" type="number" value="800"/>
+      <label for="nw">
+       Rata nou&abreve; pe lun&abreve; (lei)
+      </label>
+      <input id="nw" min="0" type="number" value="900"/>
+     </div>
+     <div class="card">
+      <h3>
+       Grad de &icirc;ndatorare:
+       <span id="ratio">
+       </span>
+      </h3>
+      <div class="gauge">
+       <i id="mark">
+       </i>
+      </div>
+      <div class="scale">
+       <span style="left:0">
+        0%
+       </span>
+       <span style="left:30%">
+        30%
+       </span>
+       <span style="left:40%">
+        40%
+       </span>
+       <span style="left:100%">
+        100%
+       </span>
+      </div>
+     </div>
+     <div id="verdict">
+     </div>
+    </section>
+    <!-- Anti-fraud example and quiz -->
+    <section id="fraud">
+     <h2>
+      Test anti-fraud&abreve;
+     </h2>
+     <div class="card">
+      <h3>
+       C&acirc;t &icirc;nseamn&abreve; &bdquo;4% pe zi&rdquo;?
+      </h3>
+      <label for="days">
+       Dup&abreve;
+       <b id="daysV">
+       </b>
+      </label>
+      <input id="days" max="365" min="1" type="range" value="30"/>
+      <p class="mute" style="margin:8px 0 2px">
+       1 000 lei ar deveni:
+      </p>
+      <div class="big" id="grow">
+      </div>
+      <p class="mute" id="growNote" style="margin:6px 0 0">
+      </p>
+     </div>
+     <div class="card" id="quiz">
+     </div>
+    </section>
+    <!-- Scripted financial assistant -->
+    <section id="bot">
+     <h2>
+      Asistent financiar
+     </h2>
+     <p class="mute">
+      Întrebări despre credite, dobânzi și siguranța banilor. Configurează un model local sau un API din butonul Setări.
+     </p>
+     <p class="assistant-mode" id="assistantMode">Asistent AI neconfigurat.</p>
+     <div class="chat" id="chat">
+     </div>
+     <div class="chips" id="chips">
+     </div>
+     <form autocomplete="off" class="send" id="sendf">
+      <input aria-label="&Icirc;ntrebarea ta" id="ask" placeholder="Scrie o &icirc;ntrebare&hellip;" type="text"/>
+      <button class="btn" type="submit">
+       Trimite
+      </button>
+     </form>
+     <button class="btn ghost" id="human" style="width:100%;margin-top:10px">
+      Vorbește cu un specialist
+     </button>
+    </section>
+   </main>
+   <nav id="nav" role="tablist">
+    <button aria-selected="true" data-go="home">
+     <i class="fa-solid fa-house" aria-hidden="true"></i>
+     Acas&abreve;
+    </button>
+    <button data-go="calc">
+     <i class="fa-solid fa-calculator" aria-hidden="true"></i>
+     Credite
+    </button>
+    <button data-go="debt">
+     <i class="fa-solid fa-gauge-high" aria-hidden="true"></i>
+     Rata
+    </button>
+    <button data-go="fraud">
+     <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+     Anti-fraud&abreve;
+    </button>
+    <button data-go="bot">
+     <i class="fa-solid fa-comments" aria-hidden="true"></i>
+     Asistent
+    </button>
+   </nav>
+  </div>
