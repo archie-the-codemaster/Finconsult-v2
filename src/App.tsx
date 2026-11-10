@@ -320,7 +320,7 @@ function HomePage({ onNavigate }: { onNavigate: (page: Page) => void }) {
 }
 
 /* The annual percentage rate is approximated from the monthly repayment
-   and the amount actually received after the upfront fee. */
+   and the amount actually received after the upfront fee. ????*/
 function calculateLoan(
   principal: number,
   months: number,
