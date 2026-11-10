@@ -37,68 +37,73 @@ export default function App() {
   const [profileError, setProfileError] = useState("");
   const [profileRefresh, setProfileRefresh] = useState(0);
 
+  
+  // Keep the Supabase session in sync with React.
   useEffect(() => {
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => {
-    setSession(session);
-  });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
 
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    setSession(session);
-  });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
 
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load the user's profile whenever their session changes.
   useEffect(() => {
-  if (!session) {
-    setProfile(null);
-    setProfileError("");
-    setProfileLoading(false);
-    return;
-  }
-
-  const controller = new AbortController();
-
-  const loadProfile = async () => {
-    setProfileLoading(true);
-    setProfile(null);
-    setProfileError("");
-
-    try {
-      const result = await fetchMe(
-        session.access_token,
-        controller.signal,
-      );
-
-      setProfile(result.profile);
-
-      if (result.profile_status === "missing") {
-        setProfileError(
-          "Profilul nu a fost găsit. Încearcă să reîncarci datele.",
-        );
-      }
-    } catch (error) {
-      if (controller.signal.aborted) return;
-
+    if (!session) {
       setProfile(null);
-      setProfileError(
-        error instanceof Error
-          ? error.message
-          : "Nu s-a putut încărca profilul.",
-      );
-    } finally {
-      if (!controller.signal.aborted) {
-        setProfileLoading(false);
-      }
+      setProfileError("");
+      setProfileLoading(false);
+      return;
     }
-  };
 
-  loadProfile();
+    const controller = new AbortController();
 
-  return () => controller.abort();
+    const loadProfile = async () => {
+      setProfileLoading(true);
+      setProfile(null);
+      setProfileError("");
+
+      try {
+        const result = await fetchMe(
+          session.access_token,
+          controller.signal,
+        );
+
+        setProfile(result.profile);
+
+        if (result.profile_status === "missing") {
+          setProfileError(
+            "Profilul nu a fost găsit. Încearcă să reîncarci datele.",
+          );
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+
+        setProfile(null);
+        setProfileError(
+          error instanceof Error
+            ? error.message
+            : "Nu s-a putut încărca profilul.",
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setProfileLoading(false);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => controller.abort();
   }, [session?.access_token, profileRefresh]);
 
-  return () => subscription.unsubscribe();
-  }, []);
+
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
