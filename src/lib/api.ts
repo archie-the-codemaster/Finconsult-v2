@@ -30,7 +30,7 @@ export async function fetchMe(
   accessToken: string,
   signal?: AbortSignal,
 ): Promise<MeResponse> {
-  if (!API_BASE_URL) {
+  if (!response.ok) {
      throw new ApiError(
     result?.error || `Eroare API: ${response.status}`,
     response.status,

@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import AuthPanel from "./components/AuthPanel";
-import { fetchMe, type Profile } from "./lib/api";
+import { fetchMe, ApiError, type Profile } from "./lib/api";
+
 
 
 type Page = "home" | "calc" | "debt" | "fraud" | "bot";
@@ -81,6 +82,8 @@ export default function App() {
           controller.signal,
         );
 
+        if (controller.signal.aborted) return;
+
         setProfile(result.profile);
 
         if (result.profile_status === "missing") {
@@ -90,6 +93,31 @@ export default function App() {
         }
       } catch (error) {
         if (controller.signal.aborted) return;
+
+        if (error instanceof ApiError && error.status === 401) {
+          try {
+            const { data, error: refreshError } =
+              await supabase.auth.refreshSession();
+
+            if (controller.signal.aborted) return;
+
+            if (!refreshError && data.session) {
+              // The auth listener will update the session,
+              // triggering this effect again with the new token.
+              return;
+            }
+          } catch {
+            // Fall through to the session error below.
+          }
+
+          if (controller.signal.aborted) return;
+
+          setProfile(null);
+          setProfileError(
+            "Nu am putut valida sesiunea. Verifică conexiunea sau autentifică-te din nou.",
+          );
+          return;
+        }
 
         setProfile(null);
         setProfileError(
@@ -103,6 +131,12 @@ export default function App() {
         }
       }
     };
+
+    loadProfile();
+
+    return () => controller.abort();
+  }, [session?.access_token, profileRefresh]);
+
 
     loadProfile();
 
