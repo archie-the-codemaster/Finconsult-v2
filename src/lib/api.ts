@@ -30,13 +30,6 @@ export async function fetchMe(
   accessToken: string,
   signal?: AbortSignal,
 ): Promise<MeResponse> {
-  if (!response.ok) {
-     throw new ApiError(
-    result?.error || `Eroare API: ${response.status}`,
-    response.status,
-  );
-  }
-
   const response = await fetch(`${API_BASE_URL}/api/me`, {
     method: "GET",
     headers: {
@@ -46,13 +39,23 @@ export async function fetchMe(
     signal,
   });
 
-  const result = await response.json().catch(() => null);
+  const result = await response.json().catch(() => null) as
+    | (MeResponse & { error?: string })
+    | null;
 
   if (!response.ok) {
-    throw new Error(
+    throw new ApiError(
       result?.error || `Eroare API: ${response.status}`,
+      response.status,
     );
   }
 
-  return result as MeResponse;
+  if (!result || typeof result !== "object") {
+    throw new ApiError(
+      "Serverul a returnat un răspuns invalid.",
+      response.status,
+    );
+  }
+
+  return result;
 }

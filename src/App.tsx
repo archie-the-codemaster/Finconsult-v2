@@ -1,11 +1,10 @@
+
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import AuthPanel from "./components/AuthPanel";
 import { fetchMe, ApiError, type Profile } from "./lib/api";
-
-
 
 type Page = "home" | "calc" | "debt" | "fraud" | "bot";
 type Theme = "light" | "dark";
@@ -39,7 +38,7 @@ export default function App() {
   const [profileError, setProfileError] = useState("");
   const [profileRefresh, setProfileRefresh] = useState(0);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
-  
+
   // Keep the Supabase session in sync with React.
   useEffect(() => {
     const {
@@ -137,14 +136,6 @@ export default function App() {
     return () => controller.abort();
   }, [session?.access_token, profileRefresh]);
 
-
-    loadProfile();
-
-    return () => controller.abort();
-  }, [session?.access_token, profileRefresh]);
-
-
-
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("finconsult-theme", theme);
@@ -176,35 +167,35 @@ export default function App() {
         </div>
 
         <div className="brand-actions">
-            <span className="ribbon-note">
-              <Icon name="fa-wand-magic-sparkles" />
-              Claritate pentru decizii mai bune
-            </span>
+          <span className="ribbon-note">
+            <Icon name="fa-wand-magic-sparkles" />
+            Claritate pentru decizii mai bune
+          </span>
 
-            <button
-              className="button button-secondary account-button"
-              onClick={() => setAuthOpen(true)}
-            >
+          <button
+            className="button button-secondary account-button"
+            onClick={() => setAuthOpen(true)}
+          >
             {session ? "Contul meu" : "Autentificare"}
-            </button>
-            
-            <button
-              className="icon-button"
-              onClick={() => setSettingsOpen(true)}
-              aria-label="Deschide setările"
-              title="Setări"
-            >
-              <Icon name="fa-gear" />
-            </button>
-            
-            <button
-              className="icon-button theme-toggle"
-              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-              aria-label={theme === "light" ? "Activează tema întunecată" : "Activează tema luminoasă"}
-              title="Schimbă tema"
-            >
-              <Icon name={theme === "light" ? "fa-moon" : "fa-sun"} />
-            </button>
+          </button>
+
+          <button
+            className="icon-button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Deschide setările"
+            title="Setări"
+          >
+            <Icon name="fa-gear" />
+          </button>
+
+          <button
+            className="icon-button theme-toggle"
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            aria-label={theme === "light" ? "Activează tema întunecată" : "Activează tema luminoasă"}
+            title="Schimbă tema"
+          >
+            <Icon name={theme === "light" ? "fa-moon" : "fa-sun"} />
+          </button>
         </div>
       </header>
 
@@ -241,7 +232,10 @@ export default function App() {
           {page === "home" && <HomePage onNavigate={navigate} />}
 
           {page === "calc" && (
-            <LoanCalculator onChoosePayment={setMonthlyPayment} onNavigate={navigate} />
+            <LoanCalculator
+              onChoosePayment={setMonthlyPayment}
+              onNavigate={navigate}
+            />
           )}
 
           {page === "debt" && (
@@ -250,14 +244,18 @@ export default function App() {
 
           {page === "fraud" && <FraudPage />}
 
-          {page === "bot" && <AssistantMigrationNotice onOpenSettings={() => setSettingsOpen(true)} />}
+          {page === "bot" && (
+            <AssistantMigrationNotice
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
+          )}
         </main>
       </div>
 
       <footer className="site-footer">
         Finconsult · Prototip educațional · Datele și ofertele sunt demonstrative
       </footer>
-      
+
       {authOpen && (
         <AuthPanel
           session={session}
@@ -270,7 +268,7 @@ export default function App() {
           onClose={() => setAuthOpen(false)}
           onRefreshProfile={() => setProfileRefresh((value) => value + 1)}
         />
-      )} 
+      )}
 
       {settingsOpen && (
         <SettingsPanel onClose={() => setSettingsOpen(false)} />

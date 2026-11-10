@@ -41,6 +41,10 @@ export default function AuthPanel({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] =
+    useState("");
+  const [resendingConfirmation, setResendingConfirmation] =
+    useState(false);
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -60,7 +64,7 @@ export default function AuthPanel({
     setMessage(text);
     setError(isError);
   };
-
+  
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -90,11 +94,16 @@ export default function AuthPanel({
 
         if (error) throw error;
 
-        showMessage(
-          data.session
-            ? "Contul a fost creat și ești autentificat."
-            : "Cont creat! Verifică emailul pentru confirmare."
-        );
+        if (data.session) {
+          setPendingConfirmationEmail("");
+          showMessage("Contul a fost creat și ești autentificat.");
+        } else {
+          setPendingConfirmationEmail(email.trim());
+          showMessage(
+            "Cont creat! Verifică emailul și apasă linkul de confirmare."
+          );
+        }
+
       } else if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -127,6 +136,43 @@ export default function AuthPanel({
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resendConfirmation = async () => {
+    const targetEmail = pendingConfirmationEmail || session?.user.email;
+
+    if (!targetEmail) {
+      showMessage("Nu există o adresă de email disponibilă.", true);
+      return;
+    }
+
+    setResendingConfirmation(true);
+    showMessage("");
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: targetEmail,
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (error) throw error;
+
+      showMessage(
+        "Dacă adresa poate primi o confirmare, vei primi un nou email."
+      );
+    } catch (err) {
+      showMessage(
+        err instanceof Error
+          ? err.message
+          : "Nu s-a putut retrimite emailul.",
+        true
+      );
+    } finally {
+      setResendingConfirmation(false);
     }
   };
 
@@ -361,6 +407,26 @@ export default function AuthPanel({
               </h3>
 
               <p className="muted-note">{session.user.email}</p>
+              {session.user.email_confirmed_at ? (
+                <div className="notice notice-success">
+                  <i className="fa-solid fa-circle-check" aria-hidden="true" />
+                  {" "}Adresă de email confirmată
+                </div>
+              ) : (
+                <div className="notice notice-warning">
+                  <p>Adresa de email nu a fost încă verificată.</p>
+              
+                  <button
+                    className="button button-secondary"
+                    onClick={resendConfirmation}
+                    disabled={resendingConfirmation}
+                  >
+                    {resendingConfirmation
+                      ? "Se trimite..."
+                      : "Retrimite emailul de confirmare"}
+                  </button>
+                </div>
+              )}
 
               {profile?.created_at && (
                 <p className="muted-note">
