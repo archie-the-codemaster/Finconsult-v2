@@ -19,12 +19,22 @@ export interface MeResponse {
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "")
   .replace(/\/+$/, "");
 
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function fetchMe(
   accessToken: string,
   signal?: AbortSignal,
 ): Promise<MeResponse> {
   if (!API_BASE_URL) {
-    throw new Error("URL-ul API nu este configurat.");
+     throw new ApiError(
+    result?.error || `Eroare API: ${response.status}`,
+    response.status,
+  );
   }
 
   const response = await fetch(`${API_BASE_URL}/api/me`, {
