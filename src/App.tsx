@@ -5,6 +5,7 @@ import { supabase } from "./lib/supabase";
 import AuthPanel from "./components/AuthPanel";
 import { fetchMe, type Profile } from "./lib/api";
 
+
 type Page = "home" | "calc" | "debt" | "fraud" | "bot";
 type Theme = "light" | "dark";
 
@@ -36,14 +37,19 @@ export default function App() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileRefresh, setProfileRefresh] = useState(0);
-
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   
   // Keep the Supabase session in sync with React.
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+
+      if (event === "PASSWORD_RECOVERY") {
+        setPasswordRecovery(true);
+        setAuthOpen(true);
+      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -224,6 +230,9 @@ export default function App() {
           profile={profile}
           profileLoading={profileLoading}
           profileError={profileError}
+          recoveryMode={passwordRecovery}
+          onRecoveryComplete={() => setPasswordRecovery(false)}
+          onProfileUpdated={setProfile}
           onClose={() => setAuthOpen(false)}
           onRefreshProfile={() => setProfileRefresh((value) => value + 1)}
         />
