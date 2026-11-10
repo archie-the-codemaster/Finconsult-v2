@@ -1,0 +1,12 @@
+name = "finconsult-admin-api"
+main = "src/index.ts"
+compatibility_date = "2026-11-09"
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "finconsult-admin"
+database_id = "e7dbd59b-6570-4732-9696-f7c2c76ecb1b"
+migrations_dir = "migrations"

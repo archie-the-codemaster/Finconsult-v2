@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "./lib/supabase";
+import AuthPanel from "./components/AuthPanel";
 
 type Page = "home" | "calc" | "debt" | "fraud" | "bot";
 type Theme = "light" | "dark";
@@ -20,12 +23,28 @@ function Icon({ name }: { name: string }) {
 }
 
 export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
   const [page, setPage] = useState<Page>("home");
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem("finconsult-theme") as Theme) || "light"
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [monthlyPayment, setMonthlyPayment] = useState(900);
+
+  useEffect(() => {
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    setSession(session);
+  });
+
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    setSession(session);
+  });
+
+  return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -62,6 +81,13 @@ export default function App() {
               <Icon name="fa-wand-magic-sparkles" />
               Claritate pentru decizii mai bune
             </span>
+
+            <button
+              className="button button-secondary account-button"
+              onClick={() => setAuthOpen(true)}
+            >
+            {session ? "Contul meu" : "Autentificare"}
+            </button>
             
             <button
               className="icon-button"
@@ -132,6 +158,10 @@ export default function App() {
       <footer className="site-footer">
         Finconsult · Prototip educațional · Datele și ofertele sunt demonstrative
       </footer>
+      
+      {authOpen && (
+      <AuthPanel session={session} onClose={() => setAuthOpen(false)}/>
+      )}  
 
       {settingsOpen && (
         <SettingsPanel onClose={() => setSettingsOpen(false)} />

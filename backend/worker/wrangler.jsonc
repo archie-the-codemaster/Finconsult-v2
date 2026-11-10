@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "finconsult-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-10",
+  "observability": {
+    "enabled": true
+  },
+  "env": {
+    "dev": {
+      "name": "finconsult-api-dev",
+      "vars": {
+        "ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173"
+      }
+    },
+    "production": {
+      "name": "finconsult-api",
+      "vars": {
+        "ALLOWED_ORIGINS": "https://YOUR-PRODUCTION-DOMAIN"
+      }
+    }
+  }
+}

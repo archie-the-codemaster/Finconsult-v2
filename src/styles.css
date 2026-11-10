@@ -637,3 +637,7 @@ input[type="range"] {
     flex-direction: column;
   }
 }
+
+.account-button {
+  white-space: nowrap;
+}
