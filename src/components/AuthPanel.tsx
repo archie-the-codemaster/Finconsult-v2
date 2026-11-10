@@ -1,15 +1,25 @@
 import { useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import type { Profile } from "../lib/api";
+
 
 interface AuthPanelProps {
   session: Session | null;
+  profile: Profile | null;
+  profileLoading: boolean;
+  profileError: string;
   onClose: () => void;
+  onRefreshProfile: () => void;
 }
 
 export default function AuthPanel({
   session,
+  profile,
+  profileLoading,
+  profileError,
   onClose,
+  onRefreshProfile,
 }: AuthPanelProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -167,6 +177,14 @@ export default function AuthPanel({
                 {apiResult}
               </div>
             )}
+
+            <button
+              className="button button-secondary"
+              onClick={onRefreshProfile}
+              disabled={profileLoading}
+            >
+              Reîncarcă profilul
+            </button>
 
             <button
               className="button button-secondary"

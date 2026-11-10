@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import AuthPanel from "./components/AuthPanel";
+import { fetchMe, type Profile } from "./lib/api";
 
 type Page = "home" | "calc" | "debt" | "fraud" | "bot";
 type Theme = "light" | "dark";
@@ -31,6 +32,10 @@ export default function App() {
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [monthlyPayment, setMonthlyPayment] = useState(900);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileRefresh, setProfileRefresh] = useState(0);
 
   useEffect(() => {
   const {
@@ -42,6 +47,55 @@ export default function App() {
   supabase.auth.getSession().then(({ data: { session } }) => {
     setSession(session);
   });
+
+  useEffect(() => {
+  if (!session) {
+    setProfile(null);
+    setProfileError("");
+    setProfileLoading(false);
+    return;
+  }
+
+  const controller = new AbortController();
+
+  const loadProfile = async () => {
+    setProfileLoading(true);
+    setProfile(null);
+    setProfileError("");
+
+    try {
+      const result = await fetchMe(
+        session.access_token,
+        controller.signal,
+      );
+
+      setProfile(result.profile);
+
+      if (result.profile_status === "missing") {
+        setProfileError(
+          "Profilul nu a fost găsit. Încearcă să reîncarci datele.",
+        );
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+
+      setProfile(null);
+      setProfileError(
+        error instanceof Error
+          ? error.message
+          : "Nu s-a putut încărca profilul.",
+      );
+    } finally {
+      if (!controller.signal.aborted) {
+        setProfileLoading(false);
+      }
+    }
+  };
+
+  loadProfile();
+
+  return () => controller.abort();
+  }, [session?.access_token, profileRefresh]);
 
   return () => subscription.unsubscribe();
   }, []);
@@ -160,8 +214,15 @@ export default function App() {
       </footer>
       
       {authOpen && (
-      <AuthPanel session={session} onClose={() => setAuthOpen(false)}/>
-      )}  
+        <AuthPanel
+          session={session}
+          profile={profile}
+          profileLoading={profileLoading}
+          profileError={profileError}
+          onClose={() => setAuthOpen(false)}
+          onRefreshProfile={() => setProfileRefresh((value) => value + 1)}
+        />
+      )} 
 
       {settingsOpen && (
         <SettingsPanel onClose={() => setSettingsOpen(false)} />
