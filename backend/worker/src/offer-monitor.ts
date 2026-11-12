@@ -136,13 +136,7 @@ async function upsertSources(db: D1Database): Promise<void> {
   const statements = SOURCES.map((source) => db.prepare(`
     INSERT INTO monitored_sources (id, bank, label, url, locale, source_type)
     VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      bank = excluded.bank,
-      label = excluded.label,
-      url = excluded.url,
-      locale = excluded.locale,
-      source_type = excluded.source_type,
-      updated_at = datetime('now')
+    ON CONFLICT(id) DO NOTHING
   `).bind(source.id, source.bank, source.label, source.url, source.locale, source.sourceType));
   await db.batch(statements);
 }
@@ -225,6 +219,12 @@ export async function runOfferMonitor(db: D1Database): Promise<{
   errors: number;
 }> {
   await upsertSources(db);
+  const sourceRows = await db.prepare(`SELECT id, bank, label, url, locale, source_type FROM monitored_sources WHERE enabled = 1 ORDER BY bank, label`).all<{
+    id: string; bank: string; label: string; url: string; locale: string; source_type: "product_page" | "document";
+  }>();
+  const sources = (sourceRows.results ?? []).map((source) => ({
+    id: source.id, bank: source.bank, label: source.label, url: source.url, locale: source.locale, sourceType: source.source_type,
+  }));
   const runId = uuid();
   const startedAt = new Date().toISOString();
   await db.prepare(`INSERT INTO offer_monitor_runs (id, started_at) VALUES (?, ?)`)
@@ -232,7 +232,7 @@ export async function runOfferMonitor(db: D1Database): Promise<{
 
   // Keep concurrency low to avoid stressing bank websites.
   const results: Array<"changed" | "unchanged" | "error"> = [];
-  for (const source of SOURCES) {
+  for (const source of sources) {
     results.push(await monitorSource(db, source, runId));
   }
 

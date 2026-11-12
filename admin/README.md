@@ -31,3 +31,12 @@ ON CONFLICT (email) DO UPDATE SET role = excluded.role;
 For password setup and recovery, a matching Supabase Auth account must exist. `owner` and `admin` can review/dismiss detected source changes; `analyst` has read-only queue access. Manage roles only through a trusted database session; there is no public role-management endpoint.
 
 The Loan Source Review section displays captured page text from local D1 and records each review action in its D1 `audit_log`. The admin role lookup uses the configured Supabase project. Marking a change reviewed or dismissed does not publish or alter loan offers.
+
+## Admin console sections
+
+- **Overview** reads administrator counts, monitoring status, pending source changes, and recent audit events from the Worker.
+- **AI Configuration** stores provider metadata in D1. Provider credentials are AES-GCM encrypted with a per-secret data key wrapped by `AI_CONFIG_KEK`. Configure a base64-encoded 32-byte `AI_CONFIG_KEK` as a Worker secret before saving API keys. Generate one with `openssl rand -base64 32`; keep it backed up and stable. The registry does not yet connect to an AI request path, so enabling a provider here does not send requests.
+- **User Management** lists paginated Supabase Auth accounts and marks the accounts that have admin roles. Account creation, deletion, and suspension remain in Supabase until those workflows are implemented here.
+- **Analytics** shows monitoring runs and recorded AI usage. AI requests and cost remain empty until the application writes to `daily_usage`.
+- **Security & Audit** shows current admin sessions and recorded administrative actions.
+- **Platform Settings** pauses or resumes monitored sources and can trigger a manual scan. Scheduled checks run every twelve hours.

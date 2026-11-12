@@ -1,9 +1,12 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import OfferReview from "./components/OfferReview";
+import AdminPage from "./components/AdminPages";
 import { getAdminSession, setAdminPassword, signInAdmin, signOutAdmin, type AdminSession } from "./lib/admin-auth";
+import { getDashboard, type DashboardData } from "./lib/admin-console";
 import { supabase } from "./lib/supabase";
 import "./admin-review.css";
+import "./admin-pages.css";
 
 type Page =
   | "overview"
@@ -79,6 +82,14 @@ function MetricCard({
 }
 
 function Overview() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    getDashboard().then(setData).catch((cause) => setError(cause instanceof Error ? cause.message : "Dashboard data is unavailable.")).finally(() => setLoading(false));
+  }, []);
+  const lastRun = data?.latest_run;
+  const fmt = (value: string | null | undefined) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Never";
   return (
     <>
       <div className="welcome-row">
@@ -87,35 +98,35 @@ function Overview() {
           <h2>Welcome to your control room.</h2>
           <p>Here's what's happening across Finconsult.</p>
         </div>
-        <span className="status-pill">
+          <span className={`status-pill ${!loading && !error ? "admin-live-pill" : ""}`}>
           <span className="status-dot" />
-          Awaiting backend connection
+            {loading ? "Connecting to admin API" : error ? "Admin API unavailable" : "Admin API connected"}
         </span>
       </div>
 
       <section className="metrics-grid">
         <MetricCard
-          label="Registered users"
-          value="—"
-          detail="Waiting for database connection"
+          label="Admin accounts"
+          value={data?.admin_count == null ? "—" : String(data.admin_count)}
+          detail="Registered admin accounts"
           icon="♙"
         />
         <MetricCard
           label="AI requests"
           value="—"
-          detail="Usage data unavailable"
+          detail="AI usage logging not connected"
           icon="✳"
         />
         <MetricCard
-          label="Estimated API costs"
-          value="—"
-          detail="No billing data connected"
-          icon="€"
+          label="Loan changes awaiting review"
+          value={data?.pending_changes?.count == null ? "—" : String(data.pending_changes.count)}
+          detail="Detected changes in need of review"
+          icon="↻"
         />
         <MetricCard
           label="System health"
-          value="—"
-          detail="Monitoring not configured"
+          value={lastRun ? `${lastRun.error_count ? "Attention" : "Healthy"}` : "Pending"}
+          detail={lastRun ? `Last scan ${fmt(lastRun.finished_at)}` : "No monitoring run yet"}
           icon="⌁"
         />
       </section>
@@ -127,16 +138,15 @@ function Overview() {
               <h3>Recent activity</h3>
               <p>Latest events across the platform</p>
             </div>
-            <span className="subtle-tag">LIVE DATA PENDING</span>
+            <span className="subtle-tag">{data?.recent_activity.length ? "RECENT EVENTS" : "NO EVENTS YET"}</span>
           </div>
-          <div className="empty-state">
+          {data?.recent_activity.length ? <div className="admin-activity-list">{data.recent_activity.map((event) => <div className="admin-activity-row" key={event.id}><span className="admin-activity-mark">↗</span><span><strong>{event.action.replaceAll("_", " ")}</strong><small>{event.actor_email} · {fmt(event.created_at)}</small></span></div>)}</div> : <div className="empty-state">
             <div className="empty-icon">⌁</div>
             <strong>No activity to display</strong>
             <p>
-              Administrative events will appear here once the Worker API is
-              connected.
+              Events will appear when administrators review loan sources or change settings.
             </p>
-          </div>
+          </div>}
         </article>
 
         <article className="panel infrastructure-panel">
@@ -148,10 +158,10 @@ function Overview() {
           </div>
           <div className="service-list">
             {[
-              ["Admin dashboard", "Running locally"],
-              ["Cloudflare Worker", "Not connected"],
-              ["D1 database", "Provisioned"],
-              ["Cloudflare Access", "Not configured"],
+              ["Admin dashboard", "Connected"],
+              ["Cloudflare Worker", error ? "Unavailable" : loading ? "Checking…" : "Connected"],
+              ["D1 database", error ? "Unavailable" : loading ? "Checking…" : "Connected"],
+              ["Loan sources", data ? `${data.monitoring?.enabled ?? 0} enabled` : "Checking…"],
             ].map(([name, status]) => (
               <div className="service-item" key={name}>
                 <span className="service-indicator" />
@@ -163,35 +173,17 @@ function Overview() {
         </article>
       </section>
 
+      {error && <div className="review-feedback review-error" role="alert">{error}</div>}
       <div className="notice">
         <span className="notice-icon">i</span>
         <div>
           <strong>Development environment</strong>
           <p>
-            This dashboard currently displays placeholder information. No
-            production data or credentials are being accessed.
+            Dashboard figures come from the development admin database. AI usage and billing remain empty until those integrations are connected.
           </p>
         </div>
       </div>
     </>
-  );
-}
-
-function PlaceholderPage({ page }: { page: Page }) {
-  const info = pageInfo[page];
-
-  return (
-    <section className="panel placeholder-panel">
-      <div className="placeholder-icon">
-        {navigation.find((item) => item.id === page)?.icon}
-      </div>
-      <div className="eyebrow">UNDER DEVELOPMENT</div>
-      <h2>{info.title}</h2>
-      <p>{info.description}</p>
-      <p className="placeholder-note">
-        This section will become functional as the admin API is implemented.
-      </p>
-    </section>
   );
 }
 
@@ -362,7 +354,7 @@ function App() {
             <span className="environment-dot" />
             <div>
               <strong>Development</strong>
-              <span>Local environment</span>
+              <span>Cloudflare Pages + Worker</span>
             </div>
           </div>
           <div className="sidebar-version">FINCONSULT ADMIN · v1.0.0</div>
@@ -405,7 +397,7 @@ function App() {
           ) : activePage === "offers" ? (
             <OfferReview />
           ) : (
-            <PlaceholderPage page={activePage} />
+            <AdminPage page={activePage} />
           )}
 
           <footer className="page-footer">

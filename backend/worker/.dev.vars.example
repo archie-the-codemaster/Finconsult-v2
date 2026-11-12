@@ -3,3 +3,6 @@
 SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
 SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY
 SUPABASE_SECRET_KEY=YOUR_SUPABASE_SECRET_KEY
+# Optional. Generate with: openssl rand -base64 32
+# Keep the same key wherever encrypted AI provider credentials must be decrypted.
+AI_CONFIG_KEK=GENERATE_A_32_BYTE_BASE64_KEY

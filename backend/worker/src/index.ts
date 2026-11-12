@@ -9,6 +9,7 @@ interface Env {
   key_main?: string;
   // Legacy Supabase key name retained for deployments that have not migrated yet.
   SUPABASE_SERVICE_ROLE_KEY?: string;
+  AI_CONFIG_KEK?: string;
   ALLOWED_ORIGINS: string;
   DB: D1Database;
 }
@@ -40,7 +41,7 @@ function allowedOrigins(env: Env): Set<string> {
 function corsHeaders(request: Request, env: Env): Headers {
   const headers = new Headers({
     "Vary": "Origin",
-    "Access-Control-Allow-Methods": "GET, PATCH, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Max-Age": "86400",
@@ -339,6 +340,240 @@ async function handleAdminOfferChanges(
   return json({ error: "Not found" }, 404, cors);
 }
 
+async function recordAdminAction(env: Env, actor: AdminIdentity, action: string, targetType: string, targetId: string | null, details: Record<string, unknown> = {}) {
+  await env.DB.prepare(`INSERT INTO audit_log (actor_email, action, target_type, target_id, details_json) VALUES (?, ?, ?, ?, ?)`)
+    .bind(actor.email, action, targetType, targetId, JSON.stringify(details)).run();
+}
+
+function decodeBase64(value: string): Uint8Array {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function arrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  return copy;
+}
+
+async function encryptProviderSecret(env: Env, plaintext: string) {
+  if (!env.AI_CONFIG_KEK) throw new Error("AI secret encryption is not configured. Set AI_CONFIG_KEK before saving provider secrets.");
+  const kekBytes = decodeBase64(env.AI_CONFIG_KEK);
+  if (kekBytes.byteLength !== 32) throw new Error("AI_CONFIG_KEK must be a base64-encoded 32-byte key.");
+  const dekBytes = crypto.getRandomValues(new Uint8Array(32));
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const wrapNonce = crypto.getRandomValues(new Uint8Array(12));
+  const dek = await crypto.subtle.importKey("raw", arrayBuffer(dekBytes), "AES-GCM", false, ["encrypt"]);
+  const kek = await crypto.subtle.importKey("raw", arrayBuffer(kekBytes), "AES-GCM", false, ["encrypt"]);
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: arrayBuffer(nonce) }, dek, new TextEncoder().encode(plaintext));
+  const wrappedDek = await crypto.subtle.encrypt({ name: "AES-GCM", iv: arrayBuffer(wrapNonce) }, kek, arrayBuffer(dekBytes));
+  return { ciphertext: new Uint8Array(ciphertext), nonce, wrappedDek: new Uint8Array(wrappedDek), wrapNonce };
+}
+
+async function handleAdminConsole(request: Request, env: Env, cors: Headers, url: URL): Promise<Response | null> {
+  if (!url.pathname.startsWith("/api/admin/")) return null;
+  const actor = await authenticateAdmin(request, env);
+  if (actor instanceof Response) return json({ error: await actor.text() }, actor.status, cors);
+  const readOnly = actor.role === "analyst";
+  const path = url.pathname;
+
+  if (request.method === "GET" && path === "/api/admin/dashboard") {
+    const [sources, pending, runs, changes, admins, sessions, activity] = await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS enabled FROM monitored_sources").first(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM offer_source_changes WHERE review_status = 'pending'").first(),
+      env.DB.prepare("SELECT * FROM offer_monitor_runs ORDER BY started_at DESC LIMIT 1").first(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM offer_source_changes WHERE detected_at >= datetime('now', '-30 days')").first(),
+      serviceSupabase(env)?.from("admin_users").select("email", { count: "exact", head: true }) ?? Promise.resolve({ count: null }),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM admin_sessions WHERE expires_at > ?").bind(Math.floor(Date.now() / 1000)).first(),
+      env.DB.prepare("SELECT id, actor_email, action, target_type, target_id, details_json, created_at FROM audit_log ORDER BY created_at DESC LIMIT 8").all(),
+    ]);
+    return json({ monitoring: sources, pending_changes: pending, latest_run: runs, changes_30d: changes, admin_count: admins.count, active_sessions: sessions, recent_activity: activity.results ?? [] }, 200, cors);
+  }
+
+  if (request.method === "GET" && path === "/api/admin/analytics") {
+    const days = Math.min(Math.max(Number(url.searchParams.get("days") ?? 30) || 30, 7), 90);
+    const [usage, monitorRuns, changes, sources] = await Promise.all([
+      env.DB.prepare(`SELECT usage_date, SUM(request_count) AS requests, SUM(error_count) AS errors, SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens, SUM(estimated_cost_microusd) AS estimated_cost_microusd FROM daily_usage WHERE usage_date >= date('now', ?) GROUP BY usage_date ORDER BY usage_date DESC LIMIT 90`).bind(`-${days} days`).all(),
+      env.DB.prepare(`SELECT id, started_at, finished_at, checked_count, changed_count, error_count FROM offer_monitor_runs ORDER BY started_at DESC LIMIT 30`).all(),
+      env.DB.prepare(`SELECT review_status, COUNT(*) AS count FROM offer_source_changes WHERE detected_at >= datetime('now', ?) GROUP BY review_status`).bind(`-${days} days`).all(),
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS enabled FROM monitored_sources").first(),
+    ]);
+    return json({ days, usage: usage.results ?? [], monitor_runs: monitorRuns.results ?? [], changes: changes.results ?? [], sources }, 200, cors);
+  }
+
+  if (request.method === "GET" && path === "/api/admin/audit") {
+    const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 100) || 100, 1), 200);
+    const result = await env.DB.prepare("SELECT id, actor_email, action, target_type, target_id, details_json, created_at FROM audit_log ORDER BY created_at DESC LIMIT ?").bind(limit).all();
+    const sessions = await env.DB.prepare("SELECT email, COUNT(*) AS session_count, MAX(created_at) AS latest_session FROM admin_sessions WHERE expires_at > ? GROUP BY email ORDER BY latest_session DESC").bind(Math.floor(Date.now() / 1000)).all();
+    return json({ events: result.results ?? [], active_sessions: sessions.results ?? [] }, 200, cors);
+  }
+
+  if (request.method === "GET" && path === "/api/admin/users") {
+    if (readOnly) return json({ error: "User directory access is not permitted for this role" }, 403, cors);
+    const supabase = serviceSupabase(env);
+    if (!supabase) return json({ error: "Admin authentication is not configured" }, 503, cors);
+    const page = Math.min(Math.max(Number(url.searchParams.get("page") ?? 1) || 1, 1), 10000);
+    const perPage = 50;
+    try {
+      const [{ data, error }, { data: admins, error: adminError }] = await Promise.all([
+        supabase.auth.admin.listUsers({ page, perPage }),
+        supabase.from("admin_users").select("email, role"),
+      ]);
+      if (error || adminError) return json({ error: "User directory is unavailable" }, 502, cors);
+      const roles = new Map((admins ?? []).map((admin) => [admin.email.toLowerCase(), admin.role]));
+      const users = data.users.map((user) => ({
+        id: user.id,
+        email: user.email ?? "",
+        created_at: user.created_at,
+        last_sign_in_at: user.last_sign_in_at,
+        confirmed_at: user.confirmed_at,
+        banned_until: user.banned_until,
+        admin_role: roles.get((user.email ?? "").toLowerCase()) ?? null,
+      }));
+      return json({ users, page, per_page: perPage, has_more: users.length === perPage }, 200, cors);
+    } catch {
+      return json({ error: "User directory is unavailable" }, 502, cors);
+    }
+  }
+
+  if (path === "/api/admin/ai-configs" && request.method === "GET") {
+    const result = await env.DB.prepare(`SELECT c.id, c.provider, c.label, c.base_url, c.default_model, c.enabled, c.created_at, c.updated_at, CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS secret_configured FROM ai_provider_configs c LEFT JOIN provider_secrets s ON s.config_id = c.id ORDER BY c.created_at DESC`).all();
+    return json({ configs: result.results ?? [], encryption_configured: Boolean(env.AI_CONFIG_KEK), read_only: readOnly, can_panic: actor.role === "owner" }, 200, cors);
+  }
+
+  if (path === "/api/admin/ai-configs/panic" && request.method === "POST") {
+    if (actor.role !== "owner") return json({ error: "Only an owner can use the AI emergency stop" }, 403, cors);
+    let body: { confirmation?: unknown };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON body" }, 400, cors); }
+    if (body.confirmation !== "DISABLE ALL AI PROVIDERS") return json({ error: "Emergency confirmation phrase did not match" }, 400, cors);
+    const [secrets, providers] = await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS count FROM provider_secrets").first<{ count: number }>(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM ai_provider_configs WHERE enabled = 1").first<{ count: number }>(),
+    ]);
+    const details = JSON.stringify({ credentials_erased: secrets?.count ?? 0, providers_disabled: providers?.count ?? 0 });
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM provider_secrets"),
+      env.DB.prepare("UPDATE ai_provider_configs SET enabled = 0, updated_at = datetime('now')"),
+      env.DB.prepare("INSERT INTO audit_log (actor_email, action, target_type, details_json) VALUES (?, 'ai_emergency_stop', 'all_ai_providers', ?)").bind(actor.email, details),
+    ]);
+    return json({ ok: true, credentials_erased: secrets?.count ?? 0, providers_disabled: providers?.count ?? 0 }, 200, cors);
+  }
+
+  if (path === "/api/admin/ai-configs" && request.method === "POST") {
+    if (readOnly) return json({ error: "This role cannot change AI settings" }, 403, cors);
+    let body: { provider?: unknown; label?: unknown; base_url?: unknown; default_model?: unknown; enabled?: unknown; api_key?: unknown };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON body" }, 400, cors); }
+    const provider = body.provider;
+    const label = typeof body.label === "string" ? body.label.trim() : "";
+    const model = typeof body.default_model === "string" ? body.default_model.trim() : "";
+    const baseUrl = typeof body.base_url === "string" ? body.base_url.trim() : null;
+    const secret = typeof body.api_key === "string" ? body.api_key.trim() : "";
+    if (!["openai", "google", "anthropic", "custom"].includes(String(provider)) || !label || label.length > 80 || !model || model.length > 120) return json({ error: "Choose a provider and enter a label and model" }, 400, cors);
+    if (baseUrl && (!baseUrl.startsWith("https://") || baseUrl.length > 500)) return json({ error: "Base URL must be a valid HTTPS URL" }, 400, cors);
+    if (secret.length > 4096) return json({ error: "API key is too long" }, 400, cors);
+    if (body.enabled === true && !secret) return json({ error: "Enter an API key before enabling this provider" }, 400, cors);
+    const id = crypto.randomUUID();
+    try {
+      const encrypted = secret ? await encryptProviderSecret(env, secret) : null;
+      const insertConfig = env.DB.prepare(`INSERT INTO ai_provider_configs (id, provider, label, base_url, default_model, enabled) VALUES (?, ?, ?, ?, ?, ?)`)
+        .bind(id, provider, label, baseUrl, model, body.enabled === true ? 1 : 0);
+      if (encrypted) {
+        await env.DB.batch([
+          insertConfig,
+          env.DB.prepare(`INSERT INTO provider_secrets (id, config_id, ciphertext, nonce, wrapped_dek, wrap_nonce, kek_version) VALUES (?, ?, ?, ?, ?, ?, 'v1')`)
+            .bind(crypto.randomUUID(), id, encrypted.ciphertext, encrypted.nonce, encrypted.wrappedDek, encrypted.wrapNonce),
+        ]);
+      } else await insertConfig.run();
+    } catch (error) {
+      await env.DB.prepare("DELETE FROM ai_provider_configs WHERE id = ?").bind(id).run();
+      return json({ error: error instanceof Error ? error.message : "AI configuration could not be saved" }, 400, cors);
+    }
+    await recordAdminAction(env, actor, "ai_provider_created", "ai_provider_config", id, { provider, label, model });
+    return json({ id }, 201, cors);
+  }
+
+  const aiMatch = path.match(/^\/api\/admin\/ai-configs\/([\w-]+)$/);
+  if (aiMatch && request.method === "PATCH") {
+    if (readOnly) return json({ error: "This role cannot change AI settings" }, 403, cors);
+    let body: { label?: unknown; base_url?: unknown; default_model?: unknown; enabled?: unknown; api_key?: unknown };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON body" }, 400, cors); }
+    const id = aiMatch[1];
+    const existing = await env.DB.prepare("SELECT id FROM ai_provider_configs WHERE id = ?").bind(id).first();
+    if (!existing) return json({ error: "AI provider not found" }, 404, cors);
+    const label = typeof body.label === "string" ? body.label.trim() : "";
+    const model = typeof body.default_model === "string" ? body.default_model.trim() : "";
+    const baseUrl = typeof body.base_url === "string" ? body.base_url.trim() : null;
+    const secret = typeof body.api_key === "string" ? body.api_key.trim() : "";
+    if (!label || label.length > 80 || !model || model.length > 120 || (baseUrl && (!baseUrl.startsWith("https://") || baseUrl.length > 500))) return json({ error: "Check the label, model, and HTTPS base URL" }, 400, cors);
+    if (secret.length > 4096) return json({ error: "API key is too long" }, 400, cors);
+    try {
+      const encrypted = secret ? await encryptProviderSecret(env, secret) : null;
+      if (body.enabled === true && !encrypted) {
+        const storedSecret = await env.DB.prepare("SELECT id FROM provider_secrets WHERE config_id = ?").bind(id).first();
+        if (!storedSecret) return json({ error: "Enter an API key before enabling this provider" }, 400, cors);
+      }
+      const updateConfig = env.DB.prepare("UPDATE ai_provider_configs SET label = ?, base_url = ?, default_model = ?, enabled = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(label, baseUrl, model, body.enabled === true ? 1 : 0, id);
+      if (encrypted) {
+        await env.DB.batch([
+          updateConfig,
+          env.DB.prepare(`INSERT INTO provider_secrets (id, config_id, ciphertext, nonce, wrapped_dek, wrap_nonce, kek_version) VALUES (?, ?, ?, ?, ?, ?, 'v1') ON CONFLICT(config_id) DO UPDATE SET ciphertext = excluded.ciphertext, nonce = excluded.nonce, wrapped_dek = excluded.wrapped_dek, wrap_nonce = excluded.wrap_nonce, kek_version = excluded.kek_version, updated_at = datetime('now')`)
+            .bind(crypto.randomUUID(), id, encrypted.ciphertext, encrypted.nonce, encrypted.wrappedDek, encrypted.wrapNonce),
+        ]);
+      } else await updateConfig.run();
+    } catch (error) { return json({ error: error instanceof Error ? error.message : "AI configuration could not be saved" }, 400, cors); }
+    await recordAdminAction(env, actor, secret ? "ai_provider_and_key_updated" : "ai_provider_updated", "ai_provider_config", id, { label, model, enabled: body.enabled === true, key_replaced: Boolean(secret) });
+    return json({ id }, 200, cors);
+  }
+
+  const aiSecretMatch = path.match(/^\/api\/admin\/ai-configs\/([\w-]+)\/secret$/);
+  if (aiSecretMatch && request.method === "DELETE") {
+    if (readOnly) return json({ error: "This role cannot change AI settings" }, 403, cors);
+    const id = aiSecretMatch[1];
+    const existing = await env.DB.prepare("SELECT id FROM ai_provider_configs WHERE id = ?").bind(id).first();
+    if (!existing) return json({ error: "AI provider not found" }, 404, cors);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM provider_secrets WHERE config_id = ?").bind(id),
+      env.DB.prepare("UPDATE ai_provider_configs SET enabled = 0, updated_at = datetime('now') WHERE id = ?").bind(id),
+    ]);
+    await recordAdminAction(env, actor, "ai_provider_key_removed", "ai_provider_config", id);
+    return json({ id }, 200, cors);
+  }
+
+  if (aiMatch && request.method === "DELETE") {
+    if (readOnly) return json({ error: "This role cannot change AI settings" }, 403, cors);
+    await env.DB.prepare("DELETE FROM ai_provider_configs WHERE id = ?").bind(aiMatch[1]).run();
+    await recordAdminAction(env, actor, "ai_provider_deleted", "ai_provider_config", aiMatch[1]);
+    return json({ id: aiMatch[1] }, 200, cors);
+  }
+
+  if (path === "/api/admin/settings/sources" && request.method === "GET") {
+    const result = await env.DB.prepare("SELECT id, bank, label, url, locale, source_type, enabled, last_checked_at, last_status, last_error, created_at, updated_at FROM monitored_sources ORDER BY bank, label").all();
+    return json({ sources: result.results ?? [], can_manage: !readOnly }, 200, cors);
+  }
+
+  const sourceMatch = path.match(/^\/api\/admin\/settings\/sources\/([\w-]+)$/);
+  if (sourceMatch && request.method === "PATCH") {
+    if (readOnly) return json({ error: "This role cannot change monitoring settings" }, 403, cors);
+    let body: { enabled?: unknown };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON body" }, 400, cors); }
+    if (typeof body.enabled !== "boolean") return json({ error: "Enabled must be true or false" }, 400, cors);
+    const result = await env.DB.prepare("UPDATE monitored_sources SET enabled = ?, updated_at = datetime('now') WHERE id = ?").bind(body.enabled ? 1 : 0, sourceMatch[1]).run();
+    if (!result.meta?.changes) return json({ error: "Monitored source not found" }, 404, cors);
+    await recordAdminAction(env, actor, "monitor_source_toggled", "monitored_source", sourceMatch[1], { enabled: body.enabled });
+    return json({ id: sourceMatch[1], enabled: body.enabled }, 200, cors);
+  }
+
+  if (path === "/api/admin/settings/monitor/run" && request.method === "POST") {
+    if (readOnly) return json({ error: "This role cannot start monitoring runs" }, 403, cors);
+    const result = await runOfferMonitor(env.DB);
+    await recordAdminAction(env, actor, "monitor_run_started", "offer_monitor_run", result.runId, result);
+    return json(result, 200, cors);
+  }
+
+  return null;
+}
+
 async function handleRequest(
   request: Request,
   env: Env,
@@ -356,6 +591,9 @@ async function handleRequest(
 
   const adminAuthResponse = await handleAdminAuth(request, env, cors, url);
   if (adminAuthResponse) return adminAuthResponse;
+
+  const adminConsoleResponse = await handleAdminConsole(request, env, cors, url);
+  if (adminConsoleResponse) return adminConsoleResponse;
 
   if (request.method === "GET" && url.pathname === "/api/health") {
     return json(
