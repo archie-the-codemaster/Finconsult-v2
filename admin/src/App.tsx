@@ -1,10 +1,15 @@
 
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import OfferReview from "./components/OfferReview";
+import { getAdminSession, setAdminPassword, signInAdmin, signOutAdmin, type AdminSession } from "./lib/admin-auth";
+import { supabase } from "./lib/supabase";
+import "./admin-review.css";
 
 type Page =
   | "overview"
   | "ai"
   | "users"
+  | "offers"
   | "analytics"
   | "security"
   | "settings";
@@ -13,6 +18,7 @@ const navigation: { id: Page; label: string; icon: string; group: string }[] = [
   { id: "overview", label: "Overview", icon: "◫", group: "Workspace" },
   { id: "ai", label: "AI Configuration", icon: "✳", group: "Workspace" },
   { id: "users", label: "User Management", icon: "♙", group: "Management" },
+  { id: "offers", label: "Loan Source Review", icon: "↻", group: "Management" },
   { id: "analytics", label: "Analytics", icon: "▥", group: "Management" },
   { id: "security", label: "Security & Audit", icon: "◇", group: "System" },
   { id: "settings", label: "Platform Settings", icon: "⚙", group: "System" },
@@ -30,6 +36,10 @@ const pageInfo: Record<Page, { title: string; description: string }> = {
   users: {
     title: "User Management",
     description: "Manage platform accounts and access roles.",
+  },
+  offers: {
+    title: "Loan Source Review",
+    description: "Review changes detected on bank loan product pages.",
   },
   analytics: {
     title: "Analytics",
@@ -185,9 +195,105 @@ function PlaceholderPage({ page }: { page: Page }) {
   );
 }
 
+function SignIn({ onSignedIn }: { onSignedIn: (session: AdminSession) => void }) {
+  const [mode, setMode] = useState<"login" | "setup">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [supabasePassword, setSupabasePassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      onSignedIn(await signInAdmin(email.trim(), password));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Sign-in failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function setupPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    if (!supabase) {
+      setError("Password setup is not configured. Contact your administrator.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("The new passwords do not match.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: supabasePassword,
+      });
+      if (authError || !data.session) throw new Error("The existing administrator sign-in could not be verified.");
+      await setAdminPassword(data.session.access_token, newPassword);
+      await supabase.auth.signOut();
+      onSignedIn(await signInAdmin(email.trim(), newPassword));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Password setup failed.");
+    } finally {
+      setLoading(false);
+      setSupabasePassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+  }
+
+  return (
+    <main className="auth-screen">
+      <form className="auth-card" onSubmit={mode === "login" ? submit : setupPassword}>
+        <div className="brand-mark">F</div>
+        <div className="eyebrow">FINCONSULT ADMIN</div>
+        <h1>{mode === "login" ? "Sign in to continue" : "Set your admin password"}</h1>
+        <p>{mode === "login" ? "Use your Finconsult admin credentials." : "Verify your existing admin account, then choose a password for future sign-ins."}</p>
+        <label>Email address<input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+        {mode === "login" ? (
+          <label>Password<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+        ) : (
+          <>
+            <label>Current Supabase password<input type="password" autoComplete="current-password" required value={supabasePassword} onChange={(event) => setSupabasePassword(event.target.value)} /></label>
+            <label>New admin password<input type="password" autoComplete="new-password" minLength={12} maxLength={72} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>
+            <label>Confirm new password<input type="password" autoComplete="new-password" minLength={12} maxLength={72} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
+          </>
+        )}
+        {error && <div className="review-feedback review-error" role="alert">{error}</div>}
+        <button className="review-primary-button" disabled={loading}>{loading ? "Please wait…" : mode === "login" ? "Sign in" : "Set password and sign in"}</button>
+        <button className="auth-mode-button" type="button" onClick={() => { setMode(mode === "login" ? "setup" : "login"); setError(""); }}>
+          {mode === "login" ? "Set or reset admin password" : "Back to sign in"}
+        </button>
+        <span className="auth-security-note">Passwords are salted and hashed on the server. Admin permissions are checked by the API.</span>
+      </form>
+    </main>
+  );
+}
+
 function App() {
+  const [session, setSession] = useState<AdminSession | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [signOutError, setSignOutError] = useState("");
   const [activePage, setActivePage] = useState<Page>("overview");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getAdminSession()
+      .then((nextSession) => { if (alive) setSession(nextSession); })
+      .catch(() => { if (alive) setSession(null); })
+      .finally(() => { if (alive) setAuthLoading(false); });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const activeInfo = pageInfo[activePage];
 
@@ -195,6 +301,19 @@ function App() {
     setActivePage(page);
     setMobileMenuOpen(false);
   }
+
+  async function handleSignOut() {
+    setSignOutError("");
+    try {
+      await signOutAdmin();
+      setSession(null);
+    } catch {
+      setSignOutError("Could not end this session. Check your connection and try again.");
+    }
+  }
+
+  if (authLoading) return <main className="auth-screen"><div className="review-spinner" /></main>;
+  if (!session) return <SignIn onSignedIn={setSession} />;
 
   return (
     <div className="admin-shell">
@@ -265,12 +384,14 @@ function App() {
             <strong>{activeInfo.title}</strong>
           </div>
           <div className="topbar-right">
-            <span className="topbar-environment">DEV</span>
-            <div className="avatar">A</div>
+            <span className="topbar-environment">ADMIN</span>
+            <span className="admin-user-email">{session.email}</span>
+            <button className="sign-out-button" onClick={() => void handleSignOut()}>Sign out</button>
           </div>
         </header>
 
         <div className="page-content">
+          {signOutError && <div className="review-feedback review-error" role="alert">{signOutError}</div>}
           <div className="page-heading">
             <div>
               <div className="eyebrow">FINCONSULT / ADMIN</div>
@@ -281,6 +402,8 @@ function App() {
 
           {activePage === "overview" ? (
             <Overview />
+          ) : activePage === "offers" ? (
+            <OfferReview />
           ) : (
             <PlaceholderPage page={activePage} />
           )}

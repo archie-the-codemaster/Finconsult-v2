@@ -6,18 +6,45 @@
   "observability": {
     "enabled": true
   },
+  "triggers": {
+    "crons": ["0 */12 * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "finconsult-admin",
+      "database_id": "e7dbd59b-6570-4732-9696-f7c2c76ecb1b",
+      "migrations_dir": "migrations"
+    }
+  ],
   "env": {
     "dev": {
       "name": "finconsult-api-dev",
       "vars": {
-        "ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173"
-      }
+        "ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,https://finconsult-admin.pages.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "finconsult-admin-dev",
+          "database_id": "9f8f0f3e-a56f-4650-9368-f22cdd8a285f",
+          "migrations_dir": "migrations"
+        }
+      ]
     },
     "production": {
       "name": "finconsult-api",
       "vars": {
-        "ALLOWED_ORIGINS": "https://YOUR-PRODUCTION-DOMAIN"
+        "ALLOWED_ORIGINS": "https://finconsult-admin.pages.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "finconsult-admin",
+          "database_id": "e7dbd59b-6570-4732-9696-f7c2c76ecb1b",
+          "migrations_dir": "migrations"
+        }
+      ]
       }
-    }
   }
 }

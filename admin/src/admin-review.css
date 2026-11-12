@@ -1,0 +1,63 @@
+.offer-review { display: grid; gap: 16px; }
+.review-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; }
+.review-tabs { display: flex; flex-wrap: wrap; gap: 5px; }
+.review-tab { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 650; }
+.review-tab:hover { background: var(--panel-hover); color: var(--text); }
+.review-tab-active { border-color: var(--border); background: var(--panel-hover); color: var(--text); }
+.review-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: #244b32; color: #c1e4c8; font-size: 10px; }
+.review-primary-button, .review-secondary-button, .sign-out-button { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 14px; border: 1px solid var(--border); border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 700; transition: background 150ms, border-color 150ms, opacity 150ms; }
+.review-primary-button { border-color: #477653; background: #244b32; color: #d2f0d7; }
+.review-primary-button:hover:not(:disabled) { background: #2d5a3c; }
+.review-secondary-button, .sign-out-button { background: var(--panel); color: var(--text); }
+.review-secondary-button:hover:not(:disabled), .sign-out-button:hover { background: var(--panel-hover); }
+.review-primary-button:disabled, .review-secondary-button:disabled { cursor: wait; opacity: .6; }
+.review-feedback { padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
+.review-success { border-color: #355c3d; background: #16251a; color: #bfe3c3; }
+.review-error { border-color: #65413b; background: #2a1d1b; color: #f0b5a9; }
+.review-empty { display: grid; justify-items: center; gap: 9px; padding: 58px 24px; text-align: center; }
+.review-empty .empty-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: #203c29; color: var(--green); font-size: 22px; }
+.review-empty strong { color: var(--text); font-size: 14px; }
+.review-empty p { max-width: 470px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.review-spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--green); border-radius: 50%; animation: review-spin .8s linear infinite; }
+@keyframes review-spin { to { transform: rotate(360deg); } }
+.review-list { display: grid; gap: 12px; }
+.review-result-count { color: var(--muted); font-size: 11px; }
+.change-card { padding: 20px; }
+.change-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.change-bank { color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; }
+.change-card h2 { margin: 6px 0 0; color: var(--text); font-size: 16px; letter-spacing: -.3px; }
+.change-status { padding: 5px 8px; border: 1px solid var(--border); border-radius: 20px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+.status-pending { border-color: #62513a; background: #2a2419; color: #e4bf7d; }
+.status-reviewed { border-color: #355c3d; background: #16251a; color: #a9d8b0; }
+.status-dismissed { background: #202923; color: #9eaaa1; }
+.change-meta { display: flex; flex-wrap: wrap; gap: 7px 16px; margin-top: 15px; color: var(--muted); font-size: 10px; }
+.source-link { display: inline-block; margin-top: 16px; color: var(--green); font-size: 11px; font-weight: 700; text-decoration: none; }
+.source-link:hover { text-decoration: underline; }
+.evidence-details { margin-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+.evidence-details summary { padding: 13px 0; color: #b5c3b8; cursor: pointer; font-weight: 650; }
+.evidence-details pre { max-height: 420px; overflow: auto; margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: 7px; background: #111915; color: #b9c8bd; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.change-actions { display: flex; gap: 8px; margin-top: 16px; }
+.change-reviewed-meta { margin-top: 14px; color: var(--muted); font-size: 10px; }
+.auth-screen { display: grid; place-items: center; min-height: 100vh; padding: 24px; background: var(--bg); }
+.auth-card { display: grid; gap: 14px; width: min(100%, 410px); padding: 32px; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); box-shadow: 0 20px 70px #0004; }
+.auth-card > .brand-mark { margin-bottom: 3px; }
+.auth-card h1 { margin: -7px 0 0; color: var(--text); font-size: 23px; letter-spacing: -.7px; }
+.auth-card p { margin: -7px 0 4px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.auth-card label { display: grid; gap: 7px; color: #b2c0b6; font-size: 11px; font-weight: 700; }
+.auth-card input { width: 100%; min-height: 42px; padding: 0 11px; border: 1px solid var(--border); border-radius: 7px; outline: 0; background: #111915; color: var(--text); font: inherit; }
+.auth-card input:focus { border-color: #578467; box-shadow: 0 0 0 3px #5784672b; }
+.auth-card .review-primary-button { min-height: 42px; margin-top: 2px; }
+.auth-mode-button { border: 0; background: transparent; color: #9bb9a5; cursor: pointer; font: inherit; font-size: 11px; padding: 4px; }
+.auth-mode-button:hover { color: #d1e2d6; }
+.auth-security-note { color: var(--muted); font-size: 10px; line-height: 1.5; text-align: center; }
+.topbar-right { gap: 12px; }
+.admin-user-email { max-width: 220px; overflow: hidden; color: #b5c2b8; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.sign-out-button { min-height: 32px; padding: 0 10px; font-size: 10px; }
+@media (max-width: 720px) {
+  .review-toolbar { align-items: stretch; flex-direction: column; }
+  .review-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .review-tab { white-space: nowrap; }
+  .change-card { padding: 15px; }
+  .admin-user-email { display: none; }
+  .auth-card { padding: 25px; }
+}
